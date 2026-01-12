@@ -189,7 +189,7 @@ export default function ServiceProviders() {
   });
 
   const { data: services, isLoading: servicesLoading } = useQuery<Service[]>({
-    queryKey: ["/api/services", selectedCategory, locationFilter],
+    queryKey: ["/api/services", { categoryId: selectedCategory || undefined, location: locationFilter || undefined }],
   });
 
   const filteredServices = services?.filter((service) => {

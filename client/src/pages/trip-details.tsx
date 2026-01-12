@@ -72,7 +72,7 @@ export default function TripDetails() {
   const { user } = useAuth();
 
   const { data: servicesResult, isLoading: servicesLoading } = useQuery<{ services: ProviderService[], total: number }>({
-    queryKey: ["/api/services", { destination: trip?.destination }],
+    queryKey: ["/api/services", { location: trip?.destination }],
     enabled: !!trip?.destination,
   });
 

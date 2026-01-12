@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerChatRoutes } from "./replit_integrations/chat";
 import { 
   users, helpGuideTrips, touristPlaceResults, touristPlacesSearches, 
   aiBlueprints, vendors, insertVendorSchema,
@@ -36,6 +37,7 @@ export async function registerRoutes(
   // Auth setup
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerChatRoutes(app);
 
   // Trips Routes
   app.get(api.trips.list.path, isAuthenticated, async (req, res) => {

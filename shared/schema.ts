@@ -4154,3 +4154,152 @@ export type DayBoundary = typeof dayBoundaries.$inferSelect;
 export type InsertDayBoundary = z.infer<typeof insertDayBoundarySchema>;
 export type EnergyTracking = typeof energyTracking.$inferSelect;
 export type InsertEnergyTracking = z.infer<typeof insertEnergyTrackingSchema>;
+
+// === Expert/Provider Logistics Integration ===
+
+// Provider weekly availability schedule (recurring patterns)
+export const providerAvailabilitySchedule = pgTable("provider_availability_schedule", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  providerId: varchar("provider_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  dayOfWeek: integer("day_of_week").notNull(), // 0=Sunday, 6=Saturday
+  startTime: varchar("start_time", { length: 10 }).notNull(), // "09:00"
+  endTime: varchar("end_time", { length: 10 }).notNull(), // "20:00"
+  isAvailable: boolean("is_available").default(true),
+
+  // Preferred service slots within this availability
+  preferredSlots: jsonb("preferred_slots").default([]).$type<{
+    label: string; // "Lunch Tours", "Dinner Tours"
+    startTime: string;
+    endTime: string;
+    isPreferred: boolean;
+    reason: string;
+  }[]>(),
+
+  // Dynamic pricing adjustments for this schedule block
+  pricingModifier: integer("pricing_modifier").default(0), // e.g., +20 for weekends, -25 for off-peak
+  pricingReason: varchar("pricing_reason", { length: 255 }),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Provider blackout dates (unavailable periods)
+export const providerBlackoutDates = pgTable("provider_blackout_dates", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  providerId: varchar("provider_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  reason: varchar("reason", { length: 500 }),
+  isRecurring: boolean("is_recurring").default(false),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Booking requests with full three-party context
+export const providerBookingRequests = pgTable("provider_booking_requests", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tripId: varchar("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
+  providerId: varchar("provider_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expertId: varchar("expert_id").references(() => users.id, { onDelete: "set null" }),
+
+  // Service details
+  serviceType: varchar("service_type", { length: 100 }).notNull(),
+  serviceDescription: text("service_description"),
+  requestedDate: date("requested_date").notNull(),
+  requestedStartTime: varchar("requested_start_time", { length: 10 }).notNull(),
+  requestedEndTime: varchar("requested_end_time", { length: 10 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }),
+
+  // Client schedule context shared with provider
+  clientContext: jsonb("client_context").default({}).$type<{
+    tripDay: number;
+    energyLevel: string; // "high", "medium", "low"
+    priorActivity: string | null;
+    nextActivity: string | null;
+    clientAvailableFrom: string;
+    clientAvailableUntil: string;
+    dietaryRestrictions: string[];
+    mobilityLevel: string;
+    specialNotes: string;
+  }>(),
+
+  // Anchor constraints relevant to this booking
+  anchorConstraints: jsonb("anchor_constraints").default([]).$type<{
+    anchorType: string;
+    time: string;
+    constraint: string; // "Must end by 12:30pm (lunch reservation)"
+  }[]>(),
+
+  // Expert coordination notes
+  expertNotes: text("expert_notes"),
+
+  // Status flow: pending → accepted/declined/counter_offered → confirmed
+  status: varchar("status", { length: 30 }).default("pending"),
+  counterOffer: jsonb("counter_offer").default(null).$type<{
+    newStartTime: string;
+    newEndTime: string;
+    newPrice: number;
+    reason: string;
+  } | null>(),
+
+  providerResponse: text("provider_response"),
+  respondedAt: timestamp("responded_at"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Expert vendor coordination tracking (for weddings, corporate events)
+export const expertVendorCoordination = pgTable("expert_vendor_coordination", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tripId: varchar("trip_id").notNull().references(() => trips.id, { onDelete: "cascade" }),
+  expertId: varchar("expert_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // Vendor details
+  vendorName: varchar("vendor_name", { length: 255 }).notNull(),
+  vendorCategory: varchar("vendor_category", { length: 100 }).notNull(), // "photographer", "florist", "caterer", etc.
+  vendorEmail: varchar("vendor_email", { length: 255 }),
+  vendorPhone: varchar("vendor_phone", { length: 50 }),
+  providerId: varchar("provider_id").references(() => users.id, { onDelete: "set null" }), // if they're a platform provider
+
+  // Timeline
+  setupTime: varchar("setup_time", { length: 10 }), // "12:00"
+  arrivalTime: varchar("arrival_time", { length: 10 }), // "13:00"
+  startTime: varchar("start_time", { length: 10 }),
+  endTime: varchar("end_time", { length: 10 }),
+  serviceDate: date("service_date"),
+
+  // Coordination status
+  status: varchar("status", { length: 30 }).default("pending"), // pending, contacted, confirmed, contract_signed, cancelled
+  contractStatus: varchar("contract_status", { length: 30 }).default("none"), // none, sent, signed, paid_deposit, paid_full
+  depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }),
+
+  // Anchor awareness
+  primaryAnchorId: varchar("primary_anchor_id"), // links to temporal anchor this vendor schedules around
+  anchorConstraintNote: text("anchor_constraint_note"), // "Must be ready by 3:30 PM (30min before ceremony)"
+
+  notes: text("notes"),
+  lastContactedAt: timestamp("last_contacted_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Insert schemas
+export const insertProviderAvailabilityScheduleSchema = createInsertSchema(providerAvailabilitySchedule).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertProviderBlackoutDateSchema = createInsertSchema(providerBlackoutDates).omit({ id: true, createdAt: true });
+export const insertProviderBookingRequestSchema = createInsertSchema(providerBookingRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertExpertVendorCoordinationSchema = createInsertSchema(expertVendorCoordination).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Types
+export type ProviderAvailabilitySchedule = typeof providerAvailabilitySchedule.$inferSelect;
+export type InsertProviderAvailabilitySchedule = z.infer<typeof insertProviderAvailabilityScheduleSchema>;
+export type ProviderBlackoutDate = typeof providerBlackoutDates.$inferSelect;
+export type InsertProviderBlackoutDate = z.infer<typeof insertProviderBlackoutDateSchema>;
+export type ProviderBookingRequest = typeof providerBookingRequests.$inferSelect;
+export type InsertProviderBookingRequest = z.infer<typeof insertProviderBookingRequestSchema>;
+export type ExpertVendorCoordination = typeof expertVendorCoordination.$inferSelect;
+export type InsertExpertVendorCoordination = z.infer<typeof insertExpertVendorCoordinationSchema>;

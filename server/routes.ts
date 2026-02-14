@@ -10157,4 +10157,254 @@ export async function registerDiscoveryRoutes(app: Express) {
       res.status(500).json({ message: "Failed to analyze anchors", error: error.message });
     }
   });
+
+  // ==========================================
+  // Expert/Provider Logistics Integration
+  // ==========================================
+
+  // === Expert: Client Constraint Visibility ===
+
+  // Expert views all anchors + conflicts for a client's trip
+  app.get("/api/expert/trips/:tripId/constraints", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const trip = await storage.getTrip(req.params.tripId);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+      // Expert must be assigned to this trip (or be the owner)
+      const anchors = await storage.getTemporalAnchors(req.params.tripId);
+      const boundaries = await storage.getDayBoundaries(req.params.tripId);
+      const energy = await storage.getEnergyTracking(req.params.tripId);
+      const vendorCoord = await storage.getVendorCoordination(req.params.tripId);
+      const bookingReqs = await storage.getBookingRequestsByTrip(req.params.tripId);
+
+      // Compute validation conflicts
+      const { analyzeAnchorOptimization } = await import('./services/anchor-suggestion.service');
+      const tips = await analyzeAnchorOptimization(req.params.tripId);
+
+      res.json({
+        trip: {
+          id: trip.id,
+          title: trip.title,
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          eventType: trip.eventType,
+        },
+        anchors,
+        dayBoundaries: boundaries,
+        energyTracking: energy,
+        vendorCoordination: vendorCoord,
+        bookingRequests: bookingReqs,
+        optimizationTips: tips,
+        summary: {
+          totalAnchors: anchors.length,
+          immovableAnchors: anchors.filter(a => a.isImmovable).length,
+          confirmedVendors: vendorCoord.filter(v => v.status === 'confirmed' || v.status === 'contract_signed').length,
+          pendingVendors: vendorCoord.filter(v => v.status === 'pending' || v.status === 'contacted').length,
+          warningCount: tips.filter(t => t.severity === 'warning' || t.severity === 'critical').length,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to load constraints", error: error.message });
+    }
+  });
+
+  // Expert finds available providers for a specific time window
+  app.post("/api/expert/find-providers", isAuthenticated, async (req, res) => {
+    try {
+      const { date, startTime, endTime, serviceType } = req.body;
+      const dayOfWeek = new Date(date).getDay();
+
+      // Find all providers who have availability on this day/time
+      // This is a simplified matching — production would add geo, rating, specialization filters
+      const { providerAvailabilitySchedule } = await import('@shared/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const { db } = await import('./db');
+
+      const schedules = await db.select()
+        .from(providerAvailabilitySchedule)
+        .where(
+          and(
+            eq(providerAvailabilitySchedule.dayOfWeek, dayOfWeek),
+            eq(providerAvailabilitySchedule.isAvailable, true)
+          )
+        );
+
+      // Filter by time overlap
+      const matching = schedules.filter(s => {
+        return s.startTime <= startTime && s.endTime >= endTime;
+      });
+
+      // Check for blackout dates
+      const { providerBlackoutDates } = await import('@shared/schema');
+      const blackouts = await db.select().from(providerBlackoutDates);
+      const blockedProviders = new Set(
+        blackouts
+          .filter(b => date >= b.startDate && date <= b.endDate)
+          .map(b => b.providerId)
+      );
+
+      const available = matching.filter(s => !blockedProviders.has(s.providerId));
+
+      res.json({
+        availableProviders: available.map(s => ({
+          providerId: s.providerId,
+          availableFrom: s.startTime,
+          availableUntil: s.endTime,
+          pricingModifier: s.pricingModifier,
+          preferredSlots: s.preferredSlots,
+        })),
+        totalFound: available.length,
+        blockedCount: matching.length - available.length,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to find providers", error: error.message });
+    }
+  });
+
+  // === Expert: Vendor Coordination ===
+
+  app.get("/api/expert/trips/:tripId/vendors", isAuthenticated, async (req, res) => {
+    try {
+      const vendors = await storage.getVendorCoordination(req.params.tripId);
+      const confirmed = vendors.filter(v => v.status === 'confirmed' || v.status === 'contract_signed');
+      const pending = vendors.filter(v => v.status === 'pending' || v.status === 'contacted');
+      res.json({ vendors, confirmed, pending, total: vendors.length });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to load vendors", error: error.message });
+    }
+  });
+
+  app.post("/api/expert/trips/:tripId/vendors", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const vendor = await storage.createVendorCoordination({
+        ...req.body,
+        tripId: req.params.tripId,
+        expertId: userId,
+      });
+      res.json(vendor);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to add vendor", error: error.message });
+    }
+  });
+
+  app.put("/api/expert/vendors/:vendorId", isAuthenticated, async (req, res) => {
+    try {
+      const updated = await storage.updateVendorCoordination(req.params.vendorId, req.body);
+      if (!updated) return res.status(404).json({ message: "Vendor not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to update vendor", error: error.message });
+    }
+  });
+
+  app.delete("/api/expert/vendors/:vendorId", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteVendorCoordination(req.params.vendorId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to delete vendor", error: error.message });
+    }
+  });
+
+  // === Provider: Availability Management ===
+
+  app.get("/api/provider/availability", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const schedule = await storage.getProviderAvailability(userId);
+      const blackouts = await storage.getProviderBlackoutDates(userId);
+      res.json({ schedule, blackoutDates: blackouts });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to load availability", error: error.message });
+    }
+  });
+
+  app.post("/api/provider/availability", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const entry = await storage.setProviderAvailability({
+        ...req.body,
+        providerId: userId,
+      });
+      res.json(entry);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to set availability", error: error.message });
+    }
+  });
+
+  app.delete("/api/provider/availability/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteProviderAvailability(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to delete availability", error: error.message });
+    }
+  });
+
+  app.post("/api/provider/blackout-dates", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const blackout = await storage.addProviderBlackoutDate({
+        ...req.body,
+        providerId: userId,
+      });
+      res.json(blackout);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to add blackout date", error: error.message });
+    }
+  });
+
+  app.delete("/api/provider/blackout-dates/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteProviderBlackoutDate(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to delete blackout date", error: error.message });
+    }
+  });
+
+  // === Provider: Booking Requests ===
+
+  app.get("/api/provider/booking-requests", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const requests = await storage.getBookingRequests(userId);
+      res.json({ requests });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to load requests", error: error.message });
+    }
+  });
+
+  // Expert sends booking request to provider with full context
+  app.post("/api/coordination/booking-request", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const request = await storage.createBookingRequest({
+        ...req.body,
+        expertId: userId,
+      });
+      res.json(request);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to create booking request", error: error.message });
+    }
+  });
+
+  // Provider accepts/declines/counter-offers
+  app.put("/api/provider/booking-requests/:requestId/respond", isAuthenticated, async (req, res) => {
+    try {
+      const { status, counterOffer, providerResponse } = req.body;
+      const updated = await storage.updateBookingRequest(req.params.requestId, {
+        status,
+        counterOffer: counterOffer || null,
+        providerResponse,
+      });
+      if (!updated) return res.status(404).json({ message: "Request not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to respond", error: error.message });
+    }
+  });
 }

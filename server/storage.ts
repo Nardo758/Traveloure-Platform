@@ -71,6 +71,12 @@ import {
   type TemporalAnchor, type InsertTemporalAnchor,
   type DayBoundary, type InsertDayBoundary,
   type EnergyTracking, type InsertEnergyTracking,
+  providerAvailabilitySchedule, providerBlackoutDates,
+  providerBookingRequests, expertVendorCoordination,
+  type ProviderAvailabilitySchedule, type InsertProviderAvailabilitySchedule,
+  type ProviderBlackoutDate, type InsertProviderBlackoutDate,
+  type ProviderBookingRequest, type InsertProviderBookingRequest,
+  type ExpertVendorCoordination, type InsertExpertVendorCoordination,
 } from "@shared/schema";
 import { eq, ilike, and, desc, or, count, gt } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
@@ -427,6 +433,25 @@ export interface IStorage {
   // Logistics - Energy Tracking
   getEnergyTracking(tripId: string): Promise<EnergyTracking[]>;
   saveEnergyTracking(entry: InsertEnergyTracking): Promise<EnergyTracking>;
+
+  // Expert/Provider Logistics
+  getProviderAvailability(providerId: string): Promise<ProviderAvailabilitySchedule[]>;
+  setProviderAvailability(schedule: InsertProviderAvailabilitySchedule): Promise<ProviderAvailabilitySchedule>;
+  deleteProviderAvailability(id: string): Promise<void>;
+
+  getProviderBlackoutDates(providerId: string): Promise<ProviderBlackoutDate[]>;
+  addProviderBlackoutDate(blackout: InsertProviderBlackoutDate): Promise<ProviderBlackoutDate>;
+  deleteProviderBlackoutDate(id: string): Promise<void>;
+
+  getBookingRequests(providerId: string): Promise<ProviderBookingRequest[]>;
+  getBookingRequestsByTrip(tripId: string): Promise<ProviderBookingRequest[]>;
+  createBookingRequest(request: InsertProviderBookingRequest): Promise<ProviderBookingRequest>;
+  updateBookingRequest(id: string, updates: Partial<InsertProviderBookingRequest>): Promise<ProviderBookingRequest | undefined>;
+
+  getVendorCoordination(tripId: string): Promise<ExpertVendorCoordination[]>;
+  createVendorCoordination(vendor: InsertExpertVendorCoordination): Promise<ExpertVendorCoordination>;
+  updateVendorCoordination(id: string, updates: Partial<InsertExpertVendorCoordination>): Promise<ExpertVendorCoordination | undefined>;
+  deleteVendorCoordination(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2941,6 +2966,82 @@ export class DatabaseStorage implements IStorage {
   async saveEnergyTracking(entry: InsertEnergyTracking): Promise<EnergyTracking> {
     const [saved] = await db.insert(energyTracking).values(entry).returning();
     return saved;
+  }
+
+  // === Expert/Provider Logistics ===
+
+  async getProviderAvailability(providerId: string): Promise<ProviderAvailabilitySchedule[]> {
+    return await db.select().from(providerAvailabilitySchedule)
+      .where(eq(providerAvailabilitySchedule.providerId, providerId));
+  }
+
+  async setProviderAvailability(schedule: InsertProviderAvailabilitySchedule): Promise<ProviderAvailabilitySchedule> {
+    const [created] = await db.insert(providerAvailabilitySchedule).values(schedule).returning();
+    return created;
+  }
+
+  async deleteProviderAvailability(id: string): Promise<void> {
+    await db.delete(providerAvailabilitySchedule).where(eq(providerAvailabilitySchedule.id, id));
+  }
+
+  async getProviderBlackoutDates(providerId: string): Promise<ProviderBlackoutDate[]> {
+    return await db.select().from(providerBlackoutDates)
+      .where(eq(providerBlackoutDates.providerId, providerId));
+  }
+
+  async addProviderBlackoutDate(blackout: InsertProviderBlackoutDate): Promise<ProviderBlackoutDate> {
+    const [created] = await db.insert(providerBlackoutDates).values(blackout).returning();
+    return created;
+  }
+
+  async deleteProviderBlackoutDate(id: string): Promise<void> {
+    await db.delete(providerBlackoutDates).where(eq(providerBlackoutDates.id, id));
+  }
+
+  async getBookingRequests(providerId: string): Promise<ProviderBookingRequest[]> {
+    return await db.select().from(providerBookingRequests)
+      .where(eq(providerBookingRequests.providerId, providerId))
+      .orderBy(desc(providerBookingRequests.createdAt));
+  }
+
+  async getBookingRequestsByTrip(tripId: string): Promise<ProviderBookingRequest[]> {
+    return await db.select().from(providerBookingRequests)
+      .where(eq(providerBookingRequests.tripId, tripId));
+  }
+
+  async createBookingRequest(request: InsertProviderBookingRequest): Promise<ProviderBookingRequest> {
+    const [created] = await db.insert(providerBookingRequests).values(request).returning();
+    return created;
+  }
+
+  async updateBookingRequest(id: string, updates: Partial<InsertProviderBookingRequest>): Promise<ProviderBookingRequest | undefined> {
+    const [updated] = await db.update(providerBookingRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(providerBookingRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getVendorCoordination(tripId: string): Promise<ExpertVendorCoordination[]> {
+    return await db.select().from(expertVendorCoordination)
+      .where(eq(expertVendorCoordination.tripId, tripId));
+  }
+
+  async createVendorCoordination(vendor: InsertExpertVendorCoordination): Promise<ExpertVendorCoordination> {
+    const [created] = await db.insert(expertVendorCoordination).values(vendor).returning();
+    return created;
+  }
+
+  async updateVendorCoordination(id: string, updates: Partial<InsertExpertVendorCoordination>): Promise<ExpertVendorCoordination | undefined> {
+    const [updated] = await db.update(expertVendorCoordination)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(expertVendorCoordination.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteVendorCoordination(id: string): Promise<void> {
+    await db.delete(expertVendorCoordination).where(eq(expertVendorCoordination.id, id));
   }
 }
 

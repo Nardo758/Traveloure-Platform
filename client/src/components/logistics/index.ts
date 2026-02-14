@@ -22,3 +22,6 @@ export { EnergyBudgetDisplay } from "./energy-budget-display";
 export { WeddingAnchorPresets } from "./wedding-anchor-presets";
 export { ParticipantTravelTracker } from "./participant-travel-tracker";
 export { AnchorSuggestionsPanel } from "./anchor-suggestions-panel";
+export { ExpertConstraintDashboard } from "./expert-constraint-dashboard";
+export { ProviderAvailabilityManager } from "./provider-availability-manager";
+export { ExpertCoordinationHub } from "./expert-coordination-hub";

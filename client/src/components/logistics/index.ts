@@ -26,3 +26,4 @@ export { ExpertConstraintDashboard } from "./expert-constraint-dashboard";
 export { ProviderAvailabilityManager } from "./provider-availability-manager";
 export { ExpertCoordinationHub } from "./expert-coordination-hub";
 export { ProviderBookingContextPanel } from "./provider-booking-context";
+export { TripLogisticsDashboard } from "./trip-logistics-dashboard";

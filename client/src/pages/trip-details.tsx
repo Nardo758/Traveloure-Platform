@@ -1,7 +1,7 @@
 import { useTrip, useGenerateItinerary } from "@/hooks/use-trips";
 import { useParams, Link } from "wouter";
 import { Loader2, Calendar, MapPin, Sparkles, User, ArrowRight, ArrowLeft, Clock, Coffee, Camera, Utensils, Bed, Plane, ChevronRight, ShoppingCart, Star, Package } from "lucide-react";
-import { TemporalAnchorManager, ScheduleValidator, EnergyBudgetDisplay, AnchorSuggestionsPanel, WeddingAnchorPresets } from "@/components/logistics";
+import { TemporalAnchorManager, ScheduleValidator, EnergyBudgetDisplay, AnchorSuggestionsPanel, WeddingAnchorPresets, TripLogisticsDashboard } from "@/components/logistics";
 import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -401,6 +401,12 @@ export default function TripDetails() {
                 <TabsContent value="logistics" className="mt-0 space-y-6">
                   {id && (
                     <>
+                      <TripLogisticsDashboard
+                        tripId={id}
+                        tripName={trip?.title || trip?.destination || "Trip"}
+                        budget={typeof trip?.budget === 'number' ? trip.budget : 0}
+                        destination={trip?.destination || "destination"}
+                      />
                       <div className="grid md:grid-cols-2 gap-4">
                         <TemporalAnchorManager tripId={id} />
                         <ScheduleValidator tripId={id} />

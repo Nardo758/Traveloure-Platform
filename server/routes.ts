@@ -906,7 +906,7 @@ Provide a comprehensive optimization analysis in JSON format with this structure
   });
 
   // Create custom venue
-  app.post("/api/custom-venues", async (req, res) => {
+  app.post("/api/custom-venues", isAuthenticated, async (req, res) => {
     try {
       const input = insertCustomVenueSchema.parse(req.body);
       const venue = await storage.createCustomVenue(input);
@@ -921,7 +921,7 @@ Provide a comprehensive optimization analysis in JSON format with this structure
   });
 
   // Update custom venue
-  app.patch("/api/custom-venues/:id", async (req, res) => {
+  app.patch("/api/custom-venues/:id", isAuthenticated, async (req, res) => {
     try {
       const input = insertCustomVenueSchema.partial().parse(req.body);
       const updated = await storage.updateCustomVenue(req.params.id, input);
@@ -938,7 +938,7 @@ Provide a comprehensive optimization analysis in JSON format with this structure
   });
 
   // Delete custom venue
-  app.delete("/api/custom-venues/:id", async (req, res) => {
+  app.delete("/api/custom-venues/:id", isAuthenticated, async (req, res) => {
     await storage.deleteCustomVenue(req.params.id);
     res.status(204).send();
   });
@@ -2623,7 +2623,7 @@ Provide a comprehensive optimization analysis in JSON format with this structure
   });
 
   // AI-Powered Service Recommendations
-  app.post("/api/discover/recommendations", async (req, res) => {
+  app.post("/api/discover/recommendations", isAuthenticated, async (req, res) => {
     try {
       // Validate API key is configured
       if (!process.env.ANTHROPIC_API_KEY) {
@@ -6828,8 +6828,8 @@ Provide 2-4 category recommendations and up to 5 specific service recommendation
     }
   });
 
-  // Seed cities data (for initial setup)
-  app.post("/api/travelpulse/seed", async (req, res) => {
+  // Seed cities data (for initial setup - admin only)
+  app.post("/api/travelpulse/seed", isAuthenticated, async (req, res) => {
     try {
       await travelPulseService.seedTrendingCities();
       res.json({ message: "Cities seeded successfully" });

@@ -60,7 +60,7 @@ import {
   Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TemporalAnchorManager, ScheduleValidator, EnergyBudgetDisplay, AnchorSuggestionsPanel } from "@/components/logistics";
+import { TemporalAnchorManager, ScheduleValidator, EnergyBudgetDisplay, AnchorSuggestionsPanel, TripLogisticsDashboard } from "@/components/logistics";
 
 interface ItineraryItem {
   id: string;
@@ -881,6 +881,12 @@ export default function MyItineraryPage() {
           <TabsContent value="logistics" className="space-y-4">
             {id && (
               <>
+                <TripLogisticsDashboard
+                  tripId={id}
+                  tripName={data?.title || data?.destination || "Trip"}
+                  budget={0}
+                  destination={data?.destination || "destination"}
+                />
                 <div className="grid md:grid-cols-2 gap-4">
                   <TemporalAnchorManager tripId={id} />
                   <ScheduleValidator tripId={id} />

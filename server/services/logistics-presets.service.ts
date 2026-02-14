@@ -208,11 +208,206 @@ const TRAVEL_PRESETS: TemplatePresets = {
   ],
 };
 
+// Birthday template: venue and surprise coordination
+const BIRTHDAY_PRESETS: TemplatePresets = {
+  anchors: [
+    {
+      anchorType: "dinner_reservation",
+      label: "Birthday Dinner",
+      defaultBufferBefore: 60,
+      defaultBufferAfter: 120,
+      defaultTimeOfDay: "19:00",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Birthday dinner reservation",
+    },
+    {
+      anchorType: "custom",
+      label: "Cake & Surprise",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 30,
+      defaultTimeOfDay: "20:30",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Cake reveal and birthday surprise moment",
+    },
+    {
+      anchorType: "pre_booked_tour",
+      label: "Birthday Activity",
+      defaultBufferBefore: 30,
+      defaultBufferAfter: 30,
+      defaultTimeOfDay: "14:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Main birthday activity (escape room, cooking class, etc.)",
+    },
+  ],
+  dayBoundaries: [
+    {
+      dayOffset: 0,
+      latestActivityEnd: "23:30",
+      mustReturnToHotel: false,
+      reason: "Birthday celebration — late night allowed",
+    },
+  ],
+};
+
+// Corporate event template: meetings, team building, networking
+const CORPORATE_PRESETS: TemplatePresets = {
+  anchors: [
+    {
+      anchorType: "meeting_time",
+      label: "Morning Session",
+      defaultBufferBefore: 30,
+      defaultBufferAfter: 15,
+      defaultTimeOfDay: "09:00",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Morning keynote or meeting session",
+    },
+    {
+      anchorType: "custom",
+      label: "Lunch Break",
+      defaultBufferBefore: 0,
+      defaultBufferAfter: 60,
+      defaultTimeOfDay: "12:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Group lunch — networking opportunity",
+    },
+    {
+      anchorType: "meeting_time",
+      label: "Afternoon Session",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 15,
+      defaultTimeOfDay: "14:00",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Afternoon workshop or team building",
+    },
+    {
+      anchorType: "dinner_reservation",
+      label: "Team Dinner",
+      defaultBufferBefore: 30,
+      defaultBufferAfter: 120,
+      defaultTimeOfDay: "19:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Team dinner and social event",
+    },
+  ],
+  dayBoundaries: [
+    {
+      dayOffset: 0,
+      latestActivityEnd: "22:00",
+      earliestActivityStart: "08:00",
+      mustReturnToHotel: true,
+      reason: "Corporate schedule — early start, structured day",
+    },
+  ],
+};
+
+// Date Night template: intimate, focused on the special evening
+const DATE_NIGHT_PRESETS: TemplatePresets = {
+  anchors: [
+    {
+      anchorType: "pre_booked_tour",
+      label: "Pre-Dinner Activity",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 30,
+      defaultTimeOfDay: "17:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Sunset cruise, gallery visit, or cocktail class",
+    },
+    {
+      anchorType: "dinner_reservation",
+      label: "Dinner Reservation",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 90,
+      defaultTimeOfDay: "19:30",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Restaurant reservation for the evening",
+    },
+    {
+      anchorType: "custom",
+      label: "Evening Entertainment",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 60,
+      defaultTimeOfDay: "21:30",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Show, jazz bar, rooftop lounge, or nightcap",
+    },
+  ],
+  dayBoundaries: [
+    {
+      dayOffset: 0,
+      latestActivityEnd: "23:59",
+      earliestActivityStart: "16:00",
+      mustReturnToHotel: false,
+      reason: "Evening-only event — relaxed timing",
+    },
+  ],
+};
+
+// Anniversary template: romantic, milestone celebration
+const ANNIVERSARY_PRESETS: TemplatePresets = {
+  anchors: [
+    {
+      anchorType: "pre_booked_tour",
+      label: "Couples Activity",
+      defaultBufferBefore: 30,
+      defaultBufferAfter: 30,
+      defaultTimeOfDay: "10:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Couples spa, wine tasting, or scenic tour",
+    },
+    {
+      anchorType: "photographer_arrival",
+      label: "Photo Session",
+      defaultBufferBefore: 15,
+      defaultBufferAfter: 60,
+      defaultTimeOfDay: "16:00",
+      dayOffset: 0,
+      isImmovable: false,
+      description: "Anniversary photo shoot at scenic location",
+    },
+    {
+      anchorType: "dinner_reservation",
+      label: "Anniversary Dinner",
+      defaultBufferBefore: 30,
+      defaultBufferAfter: 120,
+      defaultTimeOfDay: "19:00",
+      dayOffset: 0,
+      isImmovable: true,
+      description: "Special anniversary dinner celebration",
+    },
+  ],
+  dayBoundaries: [
+    {
+      dayOffset: 0,
+      latestActivityEnd: "23:00",
+      mustReturnToHotel: false,
+      reason: "Anniversary celebration — romantic evening",
+    },
+  ],
+};
+
 const TEMPLATE_PRESETS: Record<string, TemplatePresets> = {
   wedding: WEDDING_PRESETS,
   proposal: PROPOSAL_PRESETS,
   travel: TRAVEL_PRESETS,
   vacation: TRAVEL_PRESETS,
+  birthday: BIRTHDAY_PRESETS,
+  corporate: CORPORATE_PRESETS,
+  date_night: DATE_NIGHT_PRESETS,
+  "date-night": DATE_NIGHT_PRESETS,
+  anniversary: ANNIVERSARY_PRESETS,
+  honeymoon: TRAVEL_PRESETS,
+  adventure: TRAVEL_PRESETS,
 };
 
 /**

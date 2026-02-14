@@ -10111,4 +10111,50 @@ export async function registerDiscoveryRoutes(app: Express) {
       res.status(500).json({ message: "Failed to detect impacts", error: error.message });
     }
   });
+
+  // === Logistics: AI Anchor Suggestions ===
+
+  app.post("/api/trips/:tripId/anchor-suggestions", isAuthenticated, async (req, res) => {
+    try {
+      const trip = await storage.getTrip(req.params.tripId);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+      const userId = (req.user as any).claims.sub;
+      if (trip.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { templateSlug } = req.body;
+      const startDate = trip.startDate?.toString() || new Date().toISOString().split('T')[0];
+      const endDate = trip.endDate?.toString() || startDate;
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const numberOfDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+
+      const { generateAnchorSuggestions } = await import('./services/anchor-suggestion.service');
+      const suggestions = await generateAnchorSuggestions({
+        tripId: req.params.tripId,
+        destination: trip.destination || "Unknown",
+        templateSlug: templateSlug || trip.eventType || "travel",
+        startDate,
+        endDate,
+        numberOfDays,
+      });
+      res.json({ suggestions });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to generate suggestions", error: error.message });
+    }
+  });
+
+  app.get("/api/trips/:tripId/anchor-optimization", isAuthenticated, async (req, res) => {
+    try {
+      const trip = await storage.getTrip(req.params.tripId);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+      const userId = (req.user as any).claims.sub;
+      if (trip.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { analyzeAnchorOptimization } = await import('./services/anchor-suggestion.service');
+      const tips = await analyzeAnchorOptimization(req.params.tripId);
+      res.json({ tips });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to analyze anchors", error: error.message });
+    }
+  });
 }

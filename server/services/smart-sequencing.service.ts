@@ -181,6 +181,99 @@ export const SEQUENCING_RULES: SequencingRule[] = [
   }
 ];
 
+// Template-specific sequencing rules — applied when experience type is known
+export const TEMPLATE_SEQUENCING_RULES: Record<string, SequencingRule[]> = {
+  wedding: [
+    {
+      id: 'wedding-photographer-before-ceremony',
+      name: 'Pre-Ceremony Photography',
+      description: 'Schedule photographer arrival before the ceremony for prep shots',
+      methodology: 'Wedding photographers need time for detail shots, getting-ready photos, and first-look sessions before the ceremony begins.',
+      triggerActivity: ['cultural'], // ceremony mapped to cultural
+      suggestedFollowUp: [],
+      avoidFollowUp: ['adventure', 'hiking'],
+      timeGapMinutes: { min: 120, max: 240 },
+      priority: 10,
+      category: 'logistics',
+    },
+    {
+      id: 'wedding-recovery-after-reception',
+      name: 'Post-Reception Recovery',
+      description: 'Light activities only the day after the reception',
+      methodology: 'Wedding celebrations are emotionally and physically intensive. The day after requires low-energy recovery activities.',
+      triggerActivity: ['entertainment', 'nightlife'],
+      suggestedFollowUp: ['breakfast', 'spa', 'relaxation'],
+      avoidFollowUp: ['adventure', 'hiking', 'water_sports'],
+      timeGapMinutes: { min: 480, max: 720 },
+      priority: 9,
+      category: 'wellness',
+    },
+  ],
+  corporate: [
+    {
+      id: 'corporate-break-between-sessions',
+      name: 'Session Break',
+      description: 'Mandatory break between meeting sessions',
+      methodology: 'Cognitive research shows attention drops significantly after 90 minutes. Breaks of 15-30 minutes restore focus and productivity.',
+      triggerActivity: ['cultural', 'museum'], // meetings mapped to cultural
+      suggestedFollowUp: ['walking', 'strolling', 'snack'],
+      avoidFollowUp: ['adventure', 'nightlife'],
+      timeGapMinutes: { min: 15, max: 30 },
+      priority: 9,
+      category: 'energy',
+    },
+    {
+      id: 'corporate-team-building-timing',
+      name: 'Afternoon Team Building',
+      description: 'Schedule team building activities in the afternoon for best engagement',
+      methodology: 'Team cohesion exercises work best after shared meals and morning productivity. Afternoon timing leverages social bonding from lunch.',
+      triggerActivity: ['lunch', 'dining_heavy'],
+      suggestedFollowUp: ['adventure', 'entertainment'],
+      avoidFollowUp: ['spa', 'relaxation'],
+      timeGapMinutes: { min: 30, max: 120 },
+      priority: 7,
+      category: 'experience',
+    },
+  ],
+  birthday: [
+    {
+      id: 'birthday-surprise-timing',
+      name: 'Surprise Build-Up',
+      description: 'Build excitement with lighter activities before the main surprise',
+      methodology: 'The anticipation curve peaks when lighter social activities precede the main event, creating a natural emotional crescendo.',
+      triggerActivity: ['strolling', 'sightseeing', 'shopping'],
+      suggestedFollowUp: ['entertainment', 'dinner'],
+      avoidFollowUp: ['spa', 'relaxation'],
+      timeGapMinutes: { min: 30, max: 90 },
+      priority: 8,
+      category: 'experience',
+    },
+  ],
+  proposal: [
+    {
+      id: 'proposal-calm-before',
+      name: 'Pre-Proposal Calm',
+      description: 'Low-stress activities before the proposal to keep partner relaxed',
+      methodology: 'The partner should feel relaxed and unsuspecting. High-energy or stressful activities raise adrenaline and may tip off the surprise.',
+      triggerActivity: ['spa', 'strolling', 'beach'],
+      suggestedFollowUp: ['dinner', 'sightseeing'],
+      avoidFollowUp: ['adventure', 'hiking', 'water_sports'],
+      timeGapMinutes: { min: 60, max: 180 },
+      priority: 10,
+      category: 'experience',
+    },
+  ],
+};
+
+/**
+ * Get sequencing rules for a specific template, merged with base rules.
+ * Template rules take priority (higher base priority).
+ */
+export function getSequencingRulesForTemplate(templateSlug?: string): SequencingRule[] {
+  const templateRules = templateSlug ? (TEMPLATE_SEQUENCING_RULES[templateSlug] || []) : [];
+  return [...templateRules, ...SEQUENCING_RULES];
+}
+
 // Intensity mapping for common activity types
 export const ACTIVITY_INTENSITY: Record<string, IntensityLevel> = {
   // High Intensity (7-10)

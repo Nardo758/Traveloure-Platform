@@ -21,3 +21,4 @@ export { ScheduleValidator } from "./schedule-validator";
 export { EnergyBudgetDisplay } from "./energy-budget-display";
 export { WeddingAnchorPresets } from "./wedding-anchor-presets";
 export { ParticipantTravelTracker } from "./participant-travel-tracker";
+export { AnchorSuggestionsPanel } from "./anchor-suggestions-panel";

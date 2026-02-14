@@ -15,3 +15,7 @@ export type { EmergencyContact, MedicalFacility, EmbassyInfo, WeatherAlert, Rebo
 
 export { LogisticsIntelligencePanel } from "./logistics-intelligence-panel";
 export type { LogisticsIntelligenceConfig } from "./logistics-intelligence-panel";
+
+export { TemporalAnchorManager } from "./temporal-anchor-manager";
+export { ScheduleValidator } from "./schedule-validator";
+export { EnergyBudgetDisplay } from "./energy-budget-display";

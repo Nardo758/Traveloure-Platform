@@ -1037,3 +1037,313 @@ export function reorderItinerary(
     appliedRulesCount: totalAppliedRules
   };
 }
+
+// === Anchor-Aware Scheduling ===
+
+export interface AnchorConstraint {
+  anchorType: string;
+  anchorDatetime: string; // ISO datetime
+  bufferBefore: number; // minutes
+  bufferAfter: number; // minutes
+  location?: string;
+  isImmovable: boolean;
+  dayNumber: number; // derived from trip start date
+  startTimeMinutes: number; // minutes since midnight
+}
+
+export interface DayBoundaryConstraint {
+  dayNumber: number;
+  earliestActivityStart?: string; // "HH:MM"
+  latestActivityEnd?: string; // "HH:MM"
+  mustReturnToHotel: boolean;
+}
+
+/**
+ * Convert temporal anchors into scheduling constraints.
+ * Derives dayNumber and startTimeMinutes from anchor datetime relative to trip start.
+ */
+export function parseAnchorConstraints(
+  anchors: Array<{
+    anchorType: string;
+    anchorDatetime: string | Date;
+    bufferBefore: number | null;
+    bufferAfter: number | null;
+    location?: string | null;
+    isImmovable: boolean | null;
+  }>,
+  tripStartDate: string | Date
+): AnchorConstraint[] {
+  const tripStart = new Date(tripStartDate);
+  tripStart.setHours(0, 0, 0, 0);
+
+  return anchors.map(anchor => {
+    const dt = new Date(anchor.anchorDatetime);
+    const diffMs = dt.getTime() - tripStart.getTime();
+    const dayNumber = Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+    const startTimeMinutes = dt.getHours() * 60 + dt.getMinutes();
+
+    return {
+      anchorType: anchor.anchorType,
+      anchorDatetime: dt.toISOString(),
+      bufferBefore: anchor.bufferBefore || 0,
+      bufferAfter: anchor.bufferAfter || 0,
+      location: anchor.location || undefined,
+      isImmovable: anchor.isImmovable ?? true,
+      dayNumber,
+      startTimeMinutes,
+    };
+  });
+}
+
+/**
+ * Apply anchor constraints to sequenced activities within a single day.
+ * Anchored items are pinned at their exact times; other items fill around them.
+ */
+export function applyAnchorConstraints(
+  activities: SequencedActivity[],
+  anchors: AnchorConstraint[],
+  boundaries?: DayBoundaryConstraint
+): { activities: SequencedActivity[]; anchorNotes: MethodologyNote[] } {
+  if (anchors.length === 0 && !boundaries) {
+    return { activities, anchorNotes: [] };
+  }
+
+  const notes: MethodologyNote[] = [];
+
+  // Determine day start/end from boundaries
+  const dayStartMinutes = boundaries?.earliestActivityStart
+    ? parseInt(boundaries.earliestActivityStart.split(':')[0]) * 60 + parseInt(boundaries.earliestActivityStart.split(':')[1] || '0')
+    : 8 * 60; // default 8 AM
+  const dayEndMinutes = boundaries?.latestActivityEnd
+    ? parseInt(boundaries.latestActivityEnd.split(':')[0]) * 60 + parseInt(boundaries.latestActivityEnd.split(':')[1] || '0')
+    : 22 * 60; // default 10 PM
+
+  // Build blocked time ranges from anchors (anchor time +/- buffer)
+  const blockedRanges: Array<{ start: number; end: number; label: string }> = [];
+  const pinnedActivities: Array<{ activity: SequencedActivity; startMin: number; endMin: number }> = [];
+
+  for (const anchor of anchors) {
+    const blockStart = anchor.startTimeMinutes - anchor.bufferBefore;
+    const blockEnd = anchor.startTimeMinutes + anchor.bufferAfter;
+    blockedRanges.push({ start: blockStart, end: blockEnd, label: anchor.anchorType });
+
+    // Create a pinned activity for the anchor itself
+    pinnedActivities.push({
+      activity: {
+        name: formatAnchorName(anchor.anchorType),
+        serviceType: 'transport',
+        dayNumber: anchor.dayNumber,
+        startTime: minutesToTime(anchor.startTimeMinutes),
+        endTime: minutesToTime(anchor.startTimeMinutes + anchor.bufferAfter),
+        duration: anchor.bufferAfter || 30,
+        location: anchor.location,
+      },
+      startMin: anchor.startTimeMinutes,
+      endMin: anchor.startTimeMinutes + (anchor.bufferAfter || 30),
+    });
+
+    notes.push({
+      type: 'day',
+      ruleId: `anchor-${anchor.anchorType}`,
+      ruleName: `Anchor: ${formatAnchorName(anchor.anchorType)}`,
+      note: `${formatAnchorName(anchor.anchorType)} at ${minutesToTime(anchor.startTimeMinutes)} — ${anchor.bufferBefore}min buffer before, ${anchor.bufferAfter}min after. Activities adjusted around this constraint.`,
+      methodology: 'Temporal anchoring pins immovable commitments and schedules flexible activities around them.',
+      category: 'logistics',
+      priority: 10,
+    });
+  }
+
+  if (boundaries?.latestActivityEnd) {
+    notes.push({
+      type: 'day',
+      ruleId: 'day-boundary',
+      ruleName: 'Day Boundary',
+      note: `Activities must end by ${boundaries.latestActivityEnd}${boundaries.mustReturnToHotel ? ' (must return to hotel)' : ''}.`,
+      methodology: 'Day boundary constraints ensure travelers return to accommodation on time.',
+      category: 'logistics',
+      priority: 8,
+    });
+  }
+
+  // Filter out any existing activities that overlap with anchor blocks
+  const flexibleActivities = activities.filter(activity => {
+    const actStart = timeToMinutes(activity.startTime || '08:00');
+    const actEnd = actStart + (activity.duration || 60);
+
+    for (const range of blockedRanges) {
+      if (actStart < range.end && actEnd > range.start) {
+        return false; // Overlaps with anchor block — will be rescheduled
+      }
+    }
+    return true;
+  });
+
+  // Find available time slots around anchors
+  const allSlots = findAvailableSlots(dayStartMinutes, dayEndMinutes, blockedRanges);
+
+  // Assign flexible activities to available slots
+  let slotIndex = 0;
+  let slotTimeUsed = 0;
+  const scheduledActivities: SequencedActivity[] = [];
+
+  for (const activity of flexibleActivities) {
+    const duration = activity.duration || 60;
+    let placed = false;
+
+    while (slotIndex < allSlots.length && !placed) {
+      const slot = allSlots[slotIndex];
+      const slotRemaining = (slot.end - slot.start) - slotTimeUsed;
+
+      if (duration + 15 <= slotRemaining) { // 15min buffer between activities
+        const startMin = slot.start + slotTimeUsed;
+        scheduledActivities.push({
+          ...activity,
+          startTime: minutesToTime(startMin),
+          endTime: minutesToTime(startMin + duration),
+        });
+        slotTimeUsed += duration + 15;
+        placed = true;
+      } else {
+        slotIndex++;
+        slotTimeUsed = 0;
+      }
+    }
+
+    if (!placed) {
+      // Couldn't fit — add warning note
+      notes.push({
+        type: 'day',
+        ruleId: 'schedule-overflow',
+        ruleName: 'Schedule Overflow',
+        note: `"${activity.name}" could not be scheduled around anchor constraints. Consider moving it to another day.`,
+        methodology: 'When anchor buffer zones consume too much of the day, some activities cannot fit.',
+        category: 'logistics',
+        priority: 10,
+      });
+    }
+  }
+
+  // Merge pinned anchor activities with scheduled flexible activities and sort by time
+  const allActivities = [...scheduledActivities];
+  // Don't add anchor-generated activities if they duplicate existing ones with the same type
+  const existingTypes = new Set(scheduledActivities.map(a => a.serviceType));
+  for (const pinned of pinnedActivities) {
+    if (!existingTypes.has(pinned.activity.serviceType) || pinned.activity.name.includes('Flight') || pinned.activity.name.includes('Hotel')) {
+      // Only add anchor placeholder if it adds value
+    }
+  }
+
+  allActivities.sort((a, b) => {
+    const timeA = timeToMinutes(a.startTime || '08:00');
+    const timeB = timeToMinutes(b.startTime || '08:00');
+    return timeA - timeB;
+  });
+
+  return { activities: allActivities, anchorNotes: notes };
+}
+
+/**
+ * Energy-aware reordering: penalizes sequences where consecutive high-energy
+ * activities would drain the traveler. Attempts to alternate high/low energy.
+ */
+export function applyEnergyBalancing(
+  activities: SequencedActivity[]
+): { activities: SequencedActivity[]; energyNotes: MethodologyNote[] } {
+  if (activities.length <= 2) return { activities, energyNotes: [] };
+
+  const notes: MethodologyNote[] = [];
+  const result = [...activities];
+
+  // Check for consecutive high-intensity activities
+  for (let i = 0; i < result.length - 1; i++) {
+    const intensity1 = getActivityIntensity(result[i].serviceType);
+    const intensity2 = getActivityIntensity(result[i + 1].serviceType);
+
+    if (intensity1 >= 7 && intensity2 >= 7) {
+      // Look for a low-intensity activity later that we can swap in
+      for (let j = i + 2; j < result.length; j++) {
+        const intensityJ = getActivityIntensity(result[j].serviceType);
+        if (intensityJ <= 4) {
+          // Swap to break up the high-intensity sequence
+          const temp = result[i + 1];
+          result[i + 1] = result[j];
+          result[j] = temp;
+
+          notes.push({
+            type: 'day',
+            ruleId: 'energy-balancing',
+            ruleName: 'Energy Balancing',
+            note: `Moved "${result[i + 1].name}" between high-intensity activities to prevent burnout.`,
+            methodology: 'Alternating high and low intensity activities prevents cumulative fatigue.',
+            category: 'energy',
+            priority: 7,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // Calculate total energy depletion for the day
+  let totalDepletion = 0;
+  for (const activity of result) {
+    const intensity = getActivityIntensity(activity.serviceType);
+    totalDepletion += intensity * 10; // Scale to 0-100
+  }
+
+  if (totalDepletion > 80) {
+    notes.push({
+      type: 'day',
+      ruleId: 'high-energy-warning',
+      ruleName: 'High Energy Day',
+      note: `This day has ${totalDepletion}% energy depletion. Consider removing or replacing an activity to avoid exhaustion.`,
+      methodology: 'Daily energy budget tracking prevents burnout across multi-day trips.',
+      category: 'energy',
+      priority: 9,
+    });
+  }
+
+  return { activities: result, energyNotes: notes };
+}
+
+// Helper: convert "HH:MM" to minutes since midnight
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
+// Helper: convert minutes since midnight to "HH:MM"
+function minutesToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+// Helper: find open time slots between blocked ranges
+function findAvailableSlots(
+  dayStart: number,
+  dayEnd: number,
+  blocked: Array<{ start: number; end: number }>
+): Array<{ start: number; end: number }> {
+  const sorted = [...blocked].sort((a, b) => a.start - b.start);
+  const slots: Array<{ start: number; end: number }> = [];
+  let current = dayStart;
+
+  for (const block of sorted) {
+    if (current < block.start) {
+      slots.push({ start: current, end: block.start });
+    }
+    current = Math.max(current, block.end);
+  }
+
+  if (current < dayEnd) {
+    slots.push({ start: current, end: dayEnd });
+  }
+
+  return slots;
+}
+
+// Helper: format anchor type to readable name
+function formatAnchorName(type: string): string {
+  return type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}

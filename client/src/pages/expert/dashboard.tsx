@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { ExpertLayout } from "@/components/expert-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Users, 
-  DollarSign, 
-  Star, 
-  Clock, 
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Users,
+  DollarSign,
+  Star,
+  Clock,
   AlertCircle,
   MessageSquare,
   Calendar,
@@ -16,11 +20,14 @@ import {
   CheckCircle,
   Plane,
   Heart,
-  Gift
+  Gift,
+  Package,
 } from "lucide-react";
 import { Link } from "wouter";
+import { ExpertConstraintDashboard, ExpertCoordinationHub } from "@/components/logistics";
 
 export default function ExpertDashboard() {
+  const [selectedTripId, setSelectedTripId] = useState("");
   const stats = [
     { label: "Active Clients", value: 12, icon: Users, color: "bg-blue-100 text-blue-600" },
     { label: "Revenue This Month", value: "$4,850", icon: DollarSign, color: "bg-green-100 text-green-600" },
@@ -333,6 +340,47 @@ export default function ExpertDashboard() {
             </Card>
           </div>
         </div>
+        {/* Trip Logistics Coordination */}
+        <Card className="border border-gray-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-blue-600" />
+                <CardTitle className="text-lg">Trip Logistics</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-gray-500">Trip ID:</Label>
+                <Input
+                  value={selectedTripId}
+                  onChange={(e) => setSelectedTripId(e.target.value)}
+                  placeholder="Enter trip ID"
+                  className="w-48 h-8 text-sm"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {selectedTripId ? (
+              <Tabs defaultValue="constraints">
+                <TabsList>
+                  <TabsTrigger value="constraints">Client Constraints</TabsTrigger>
+                  <TabsTrigger value="vendors">Vendor Coordination</TabsTrigger>
+                </TabsList>
+                <TabsContent value="constraints" className="mt-4">
+                  <ExpertConstraintDashboard tripId={selectedTripId} />
+                </TabsContent>
+                <TabsContent value="vendors" className="mt-4">
+                  <ExpertCoordinationHub tripId={selectedTripId} />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                Enter a trip ID above to view client constraints and coordinate vendors.
+                Select a client from the Active Clients list to get started.
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </ExpertLayout>
   );

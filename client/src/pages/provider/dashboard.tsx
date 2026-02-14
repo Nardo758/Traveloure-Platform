@@ -2,17 +2,20 @@ import { ProviderLayout } from "@/components/provider-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  CalendarCheck, 
-  Calendar, 
-  DollarSign, 
-  Star, 
-  MessageSquare, 
-  TrendingUp, 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  CalendarCheck,
+  Calendar,
+  DollarSign,
+  Star,
+  MessageSquare,
+  TrendingUp,
   Clock,
   Users,
-  ChevronRight
+  ChevronRight,
+  Package
 } from "lucide-react";
+import { ProviderAvailabilityManager, ProviderBookingContextPanel } from "@/components/logistics";
 
 const stats = [
   { label: "Pending Bookings", value: "8", icon: Clock, color: "text-amber-600" },
@@ -219,6 +222,29 @@ export default function ProviderDashboard() {
             </CardContent>
           </Card>
         </div>
+        {/* Logistics & Availability Management */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-600" />
+              <CardTitle>Logistics & Availability</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="availability">
+              <TabsList>
+                <TabsTrigger value="availability">My Availability</TabsTrigger>
+                <TabsTrigger value="booking-requests">Booking Requests</TabsTrigger>
+              </TabsList>
+              <TabsContent value="availability" className="mt-4">
+                <ProviderAvailabilityManager />
+              </TabsContent>
+              <TabsContent value="booking-requests" className="mt-4">
+                <ProviderBookingContextPanel />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </ProviderLayout>
   );

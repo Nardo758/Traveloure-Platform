@@ -2103,7 +2103,12 @@ export const travelPulseCities = pgTable("travel_pulse_cities", {
   aiBudgetEstimate: jsonb("ai_budget_estimate").default({}), // { low: 100, mid: 200, high: 400 }
   aiMustSeeAttractions: jsonb("ai_must_see_attractions").default([]), // Top attractions
   aiAvoidDates: jsonb("ai_avoid_dates").default([]), // Dates to avoid
-  
+
+  // Cache management
+  expiresAt: timestamp("expires_at"), // Stale data protection (48-hour TTL recommended)
+  aiRefreshErrorCount: integer("ai_refresh_error_count").default(0), // Track consecutive refresh failures
+  lastRefreshStatus: varchar("last_refresh_status", { length: 20 }), // success, failed
+
   // Timestamps
   lastUpdated: timestamp("last_updated").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -4303,3 +4308,83 @@ export type ProviderBookingRequest = typeof providerBookingRequests.$inferSelect
 export type InsertProviderBookingRequest = z.infer<typeof insertProviderBookingRequestSchema>;
 export type ExpertVendorCoordination = typeof expertVendorCoordination.$inferSelect;
 export type InsertExpertVendorCoordination = z.infer<typeof insertExpertVendorCoordinationSchema>;
+
+// ============================================================
+// GROK ANALYTICS & TREND STORAGE TABLES
+// ============================================================
+
+// Expert Match Analytics - Persist Grok expert matching scores for trend analysis
+export const expertMatchAnalytics = pgTable("expert_match_analytics", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  expertId: varchar("expert_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  travelerId: varchar("traveler_id").references(() => users.id, { onDelete: "set null" }),
+
+  // Match scoring
+  matchScore: integer("match_score").notNull(), // 0-100 overall score
+  breakdown: jsonb("breakdown").default({}), // {destinationMatch, specialtyMatch, budgetFit, experienceRelevance, availability}
+  reasoning: text("reasoning"),
+
+  // Traveler context
+  travelerDestination: varchar("traveler_destination", { length: 255 }),
+  travelerBudget: decimal("traveler_budget", { precision: 10, scale: 2 }),
+  travelerInterests: jsonb("traveler_interests").default([]),
+  travelerGroupSize: integer("traveler_group_size"),
+
+  // Outcome tracking
+  expertSelected: boolean("expert_selected").default(false), // Did traveler choose this expert?
+  bookingCompleted: boolean("booking_completed").default(false), // Did it lead to a booking?
+  feedback: jsonb("feedback").default({}), // Post-trip feedback
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Destination Search Patterns - Track what users search for trending analysis
+export const destinationSearchPatterns = pgTable("destination_search_patterns", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  destination: varchar("destination", { length: 255 }).notNull(),
+  city: varchar("city", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+
+  // Search context
+  searchQuery: varchar("search_query", { length: 500 }),
+  searchType: varchar("search_type", { length: 50 }).notNull(), // discover, expert_match, intelligence, trending, truth_check
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+
+  // Engagement metrics
+  resultsViewed: integer("results_viewed").default(0),
+  itemsClicked: integer("items_clicked").default(0),
+  itemSelected: boolean("item_selected").default(false), // Did they book/add to cart?
+  bookingValue: decimal("booking_value", { precision: 10, scale: 2 }),
+  dwellTimeSeconds: integer("dwell_time_seconds").default(0),
+
+  date: date("date").notNull(),
+  hour: integer("hour"), // 0-23 for time-of-day analysis
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Destination Metrics History - Time-series popularity data for trend tracking
+export const destinationMetricsHistory = pgTable("destination_metrics_history", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  destination: varchar("destination", { length: 255 }).notNull(),
+  city: varchar("city", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+
+  // Metric data
+  metricType: varchar("metric_type", { length: 50 }).notNull(), // trend_score, live_score, mention_count, crowd_level, search_volume, booking_count
+  metricValue: decimal("metric_value", { precision: 10, scale: 2 }).notNull(),
+
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+});
+
+// Insert schemas
+export const insertExpertMatchAnalyticsSchema = createInsertSchema(expertMatchAnalytics).omit({ id: true, createdAt: true });
+export const insertDestinationSearchPatternSchema = createInsertSchema(destinationSearchPatterns).omit({ id: true, createdAt: true });
+export const insertDestinationMetricsHistorySchema = createInsertSchema(destinationMetricsHistory).omit({ id: true });
+
+// Types
+export type ExpertMatchAnalytics = typeof expertMatchAnalytics.$inferSelect;
+export type InsertExpertMatchAnalytics = z.infer<typeof insertExpertMatchAnalyticsSchema>;
+export type DestinationSearchPattern = typeof destinationSearchPatterns.$inferSelect;
+export type InsertDestinationSearchPattern = z.infer<typeof insertDestinationSearchPatternSchema>;
+export type DestinationMetricsHistory = typeof destinationMetricsHistory.$inferSelect;
+export type InsertDestinationMetricsHistory = z.infer<typeof insertDestinationMetricsHistorySchema>;

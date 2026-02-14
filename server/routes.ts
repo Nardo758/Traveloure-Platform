@@ -1543,8 +1543,39 @@ Provide a comprehensive optimization analysis in JSON format with this structure
   // Get all experts with their full profiles (public)
   app.get("/api/experts", async (req, res) => {
     const experienceTypeId = req.query.experienceTypeId as string | undefined;
+    const location = req.query.location as string | undefined;
+    const experienceType = req.query.experienceType as string | undefined;
     const experts = await storage.getExpertsWithProfiles(experienceTypeId);
-    res.json(experts);
+
+    let filtered = experts;
+
+    // Filter by location (match against expert form destinations, city, or country)
+    if (location) {
+      const loc = location.toLowerCase();
+      filtered = filtered.filter((expert: any) => {
+        const form = expert.expertForm;
+        if (!form) return false;
+        const destinations = (form.destinations || []).map((d: string) => d.toLowerCase());
+        const city = (form.city || "").toLowerCase();
+        const country = (form.country || "").toLowerCase();
+        return destinations.some((d: string) => d.includes(loc) || loc.includes(d)) ||
+          city.includes(loc) || loc.includes(city) ||
+          country.includes(loc) || loc.includes(country);
+      });
+    }
+
+    // Filter by experience type name (not ID)
+    if (experienceType) {
+      const et = experienceType.toLowerCase();
+      filtered = filtered.filter((expert: any) =>
+        expert.experienceTypes?.some((t: any) =>
+          t.experienceType?.name?.toLowerCase().includes(et) ||
+          t.experienceType?.slug?.toLowerCase().includes(et)
+        )
+      );
+    }
+
+    res.json(filtered);
   });
 
   // Get a single expert with profile by ID (public)
@@ -2619,7 +2650,64 @@ Provide a comprehensive optimization analysis in JSON format with this structure
       offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
     };
     const result = await storage.unifiedSearch(filters);
+
+    // Track search pattern for trend analytics (non-blocking)
+    if (filters.query || filters.location) {
+      const userId = (req.user as any)?.claims?.sub;
+      storage.createDestinationSearchPattern({
+        destination: filters.location || filters.query || "unknown",
+        city: filters.location || undefined,
+        searchQuery: filters.query || undefined,
+        searchType: "discover",
+        userId: userId || undefined,
+        resultsViewed: result.total,
+        date: new Date().toISOString().split("T")[0],
+        hour: new Date().getHours(),
+      }).catch(err => console.error("Failed to track search pattern:", err));
+    }
+
     res.json(result);
+  });
+
+  // Analytics: Get destination search trends
+  app.get("/api/analytics/search-trends", isAuthenticated, async (req, res) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string) : 7;
+      const trends = await storage.getDestinationSearchTrends(days);
+      res.json(trends);
+    } catch (err) {
+      console.error("Error fetching search trends:", err);
+      res.status(500).json({ message: "Failed to fetch search trends" });
+    }
+  });
+
+  // Analytics: Get expert match trends
+  app.get("/api/analytics/expert-match-trends/:expertId", isAuthenticated, async (req, res) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string) : 30;
+      const trends = await storage.getExpertMatchTrends(req.params.expertId, days);
+      res.json(trends);
+    } catch (err) {
+      console.error("Error fetching expert match trends:", err);
+      res.status(500).json({ message: "Failed to fetch expert match trends" });
+    }
+  });
+
+  // Analytics: Get destination metrics history (time-series)
+  app.get("/api/analytics/destination-metrics/:destination", isAuthenticated, async (req, res) => {
+    try {
+      const metricType = (req.query.metricType as string) || "trend_score";
+      const days = req.query.days ? parseInt(req.query.days as string) : 30;
+      const history = await storage.getDestinationMetricsHistory(
+        decodeURIComponent(req.params.destination),
+        metricType,
+        days
+      );
+      res.json(history);
+    } catch (err) {
+      console.error("Error fetching destination metrics:", err);
+      res.status(500).json({ message: "Failed to fetch destination metrics" });
+    }
   });
 
   // AI-Powered Service Recommendations
@@ -5642,6 +5730,19 @@ Provide 2-4 category recommendations and up to 5 specific service recommendation
           requestContext: travelerProfile,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
         }).catch(err => console.error("Failed to store match score:", err));
+
+        // Also persist to analytics table for trend tracking
+        storage.createExpertMatchAnalytics({
+          expertId: match.expertId,
+          travelerId: userId,
+          matchScore: match.overallScore,
+          breakdown: match.breakdown,
+          reasoning: match.reasoning,
+          travelerDestination: travelerProfile.destination,
+          travelerBudget: travelerProfile.budget?.toString(),
+          travelerInterests: travelerProfile.interests || [],
+          travelerGroupSize: travelerProfile.travelers,
+        }).catch(err => console.error("Failed to store match analytics:", err));
       }
 
       res.json({ matches });

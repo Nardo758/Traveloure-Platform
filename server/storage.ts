@@ -77,8 +77,12 @@ import {
   type ProviderBlackoutDate, type InsertProviderBlackoutDate,
   type ProviderBookingRequest, type InsertProviderBookingRequest,
   type ExpertVendorCoordination, type InsertExpertVendorCoordination,
+  expertMatchAnalytics, destinationSearchPatterns, destinationMetricsHistory,
+  type ExpertMatchAnalytics, type InsertExpertMatchAnalytics,
+  type DestinationSearchPattern, type InsertDestinationSearchPattern,
+  type DestinationMetricsHistory, type InsertDestinationMetricsHistory,
 } from "@shared/schema";
-import { eq, ilike, and, desc, or, count, gt } from "drizzle-orm";
+import { eq, ilike, and, desc, or, count, gt, gte, avg } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage {
@@ -452,6 +456,15 @@ export interface IStorage {
   createVendorCoordination(vendor: InsertExpertVendorCoordination): Promise<ExpertVendorCoordination>;
   updateVendorCoordination(id: string, updates: Partial<InsertExpertVendorCoordination>): Promise<ExpertVendorCoordination | undefined>;
   deleteVendorCoordination(id: string): Promise<void>;
+
+  // Grok Analytics
+  createExpertMatchAnalytics(data: InsertExpertMatchAnalytics): Promise<ExpertMatchAnalytics>;
+  getExpertMatchAnalytics(expertId: string): Promise<ExpertMatchAnalytics[]>;
+  getExpertMatchTrends(expertId: string, days?: number): Promise<{ avgScore: number; matchCount: number; selectionRate: number }>;
+  createDestinationSearchPattern(data: InsertDestinationSearchPattern): Promise<DestinationSearchPattern>;
+  getDestinationSearchTrends(days?: number): Promise<Array<{ destination: string; searchCount: number; conversionRate: number }>>;
+  createDestinationMetricsHistory(data: InsertDestinationMetricsHistory): Promise<DestinationMetricsHistory>;
+  getDestinationMetricsHistory(destination: string, metricType: string, days?: number): Promise<DestinationMetricsHistory[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3042,6 +3055,77 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVendorCoordination(id: string): Promise<void> {
     await db.delete(expertVendorCoordination).where(eq(expertVendorCoordination.id, id));
+  }
+
+  // Grok Analytics - Expert Match Analytics
+  async createExpertMatchAnalytics(data: InsertExpertMatchAnalytics): Promise<ExpertMatchAnalytics> {
+    const [created] = await db.insert(expertMatchAnalytics).values(data).returning();
+    return created;
+  }
+
+  async getExpertMatchAnalytics(expertId: string): Promise<ExpertMatchAnalytics[]> {
+    return await db.select().from(expertMatchAnalytics)
+      .where(eq(expertMatchAnalytics.expertId, expertId))
+      .orderBy(desc(expertMatchAnalytics.createdAt));
+  }
+
+  async getExpertMatchTrends(expertId: string, days: number = 30): Promise<{ avgScore: number; matchCount: number; selectionRate: number }> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const matches = await db.select().from(expertMatchAnalytics)
+      .where(and(
+        eq(expertMatchAnalytics.expertId, expertId),
+        gte(expertMatchAnalytics.createdAt, cutoff)
+      ));
+
+    const matchCount = matches.length;
+    const avgScore = matchCount > 0 ? matches.reduce((sum, m) => sum + m.matchScore, 0) / matchCount : 0;
+    const selectionRate = matchCount > 0 ? matches.filter(m => m.expertSelected).length / matchCount : 0;
+    return { avgScore: Math.round(avgScore), matchCount, selectionRate: Math.round(selectionRate * 100) / 100 };
+  }
+
+  // Grok Analytics - Destination Search Patterns
+  async createDestinationSearchPattern(data: InsertDestinationSearchPattern): Promise<DestinationSearchPattern> {
+    const [created] = await db.insert(destinationSearchPatterns).values(data).returning();
+    return created;
+  }
+
+  async getDestinationSearchTrends(days: number = 7): Promise<Array<{ destination: string; searchCount: number; conversionRate: number }>> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const patterns = await db.select().from(destinationSearchPatterns)
+      .where(gte(destinationSearchPatterns.createdAt, cutoff));
+
+    const grouped = patterns.reduce((acc, p) => {
+      const key = p.destination;
+      if (!acc[key]) acc[key] = { searches: 0, conversions: 0 };
+      acc[key].searches++;
+      if (p.itemSelected) acc[key].conversions++;
+      return acc;
+    }, {} as Record<string, { searches: number; conversions: number }>);
+
+    return Object.entries(grouped)
+      .map(([destination, stats]) => ({
+        destination,
+        searchCount: stats.searches,
+        conversionRate: stats.searches > 0 ? Math.round((stats.conversions / stats.searches) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.searchCount - a.searchCount);
+  }
+
+  // Grok Analytics - Destination Metrics History
+  async createDestinationMetricsHistory(data: InsertDestinationMetricsHistory): Promise<DestinationMetricsHistory> {
+    const [created] = await db.insert(destinationMetricsHistory).values(data).returning();
+    return created;
+  }
+
+  async getDestinationMetricsHistory(destination: string, metricType: string, days: number = 30): Promise<DestinationMetricsHistory[]> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return await db.select().from(destinationMetricsHistory)
+      .where(and(
+        eq(destinationMetricsHistory.destination, destination),
+        eq(destinationMetricsHistory.metricType, metricType),
+        gte(destinationMetricsHistory.recordedAt, cutoff)
+      ))
+      .orderBy(desc(destinationMetricsHistory.recordedAt));
   }
 }
 

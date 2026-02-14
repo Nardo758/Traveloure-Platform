@@ -10407,4 +10407,113 @@ export async function registerDiscoveryRoutes(app: Express) {
       res.status(500).json({ message: "Failed to respond", error: error.message });
     }
   });
+
+  // ==========================================
+  // Constraint Propagation & Workflow Services
+  // ==========================================
+
+  // Propagate anchor change to affected vendors/bookings
+  app.post("/api/coordination/propagate/:tripId/:anchorId", isAuthenticated, async (req, res) => {
+    try {
+      const { propagateAnchorChange } = await import('./services/constraint-propagation.service');
+      const result = await propagateAnchorChange(
+        req.params.tripId,
+        req.params.anchorId,
+        req.body.previousDatetime
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to propagate", error: error.message });
+    }
+  });
+
+  // Advanced provider matching with scoring
+  app.post("/api/coordination/match-providers", isAuthenticated, async (req, res) => {
+    try {
+      const { findMatchingProviders } = await import('./services/provider-matching.service');
+      const result = await findMatchingProviders(req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to match providers", error: error.message });
+    }
+  });
+
+  // Build booking context for a time slot (used before sending a booking request)
+  app.post("/api/coordination/booking-context/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { buildBookingContext } = await import('./services/provider-matching.service');
+      const { date, startTime, endTime } = req.body;
+      const context = await buildBookingContext(req.params.tripId, date, startTime, endTime);
+      res.json(context);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to build context", error: error.message });
+    }
+  });
+
+  // === Wedding Coordination ===
+
+  // Get full wedding timeline built around ceremony anchor
+  app.get("/api/coordination/wedding-timeline/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { buildWeddingTimeline } = await import('./services/wedding-coordination.service');
+      const timeline = await buildWeddingTimeline(req.params.tripId);
+      res.json(timeline);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to build wedding timeline", error: error.message });
+    }
+  });
+
+  // Get vendor gap analysis for wedding
+  app.get("/api/coordination/wedding-gaps/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { getWeddingVendorGaps } = await import('./services/wedding-coordination.service');
+      const gaps = await getWeddingVendorGaps(req.params.tripId);
+      res.json({ gaps });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to analyze vendor gaps", error: error.message });
+    }
+  });
+
+  // === Corporate Coordination ===
+
+  // Get corporate logistics summary
+  app.get("/api/coordination/corporate-summary/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { getCorporateLogisticsSummary } = await import('./services/corporate-coordination.service');
+      const summary = await getCorporateLogisticsSummary(req.params.tripId);
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to load corporate summary", error: error.message });
+    }
+  });
+
+  // Generate staggered arrival plan
+  app.post("/api/coordination/staggered-arrivals/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { generateStaggeredArrivalPlan } = await import('./services/corporate-coordination.service');
+      const plan = await generateStaggeredArrivalPlan(
+        req.params.tripId,
+        req.body.date,
+        req.body.options
+      );
+      res.json(plan);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to generate arrival plan", error: error.message });
+    }
+  });
+
+  // Generate split activity plan
+  app.post("/api/coordination/split-activities/:tripId", isAuthenticated, async (req, res) => {
+    try {
+      const { generateSplitActivityPlan } = await import('./services/corporate-coordination.service');
+      const plan = await generateSplitActivityPlan(
+        req.params.tripId,
+        req.body.date,
+        req.body.tracks
+      );
+      res.json(plan);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to generate split activities", error: error.message });
+    }
+  });
 }

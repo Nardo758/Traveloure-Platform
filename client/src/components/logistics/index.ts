@@ -19,3 +19,5 @@ export type { LogisticsIntelligenceConfig } from "./logistics-intelligence-panel
 export { TemporalAnchorManager } from "./temporal-anchor-manager";
 export { ScheduleValidator } from "./schedule-validator";
 export { EnergyBudgetDisplay } from "./energy-budget-display";
+export { WeddingAnchorPresets } from "./wedding-anchor-presets";
+export { ParticipantTravelTracker } from "./participant-travel-tracker";

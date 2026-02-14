@@ -10056,4 +10056,59 @@ export async function registerDiscoveryRoutes(app: Express) {
       res.status(500).json({ message: "Failed to calculate energy", error: error.message });
     }
   });
+
+  // === Logistics: Template Presets ===
+
+  app.get("/api/logistics/presets/:templateSlug", async (req, res) => {
+    try {
+      const { getPresetsForTemplate } = await import('./services/logistics-presets.service');
+      const presets = getPresetsForTemplate(req.params.templateSlug);
+      if (!presets) {
+        return res.json({ anchors: [], dayBoundaries: [] });
+      }
+      res.json(presets);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to get presets", error: error.message });
+    }
+  });
+
+  app.post("/api/trips/:tripId/generate-presets", isAuthenticated, async (req, res) => {
+    try {
+      const trip = await storage.getTrip(req.params.tripId);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+      const userId = (req.user as any).claims.sub;
+      if (trip.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { templateSlug, eventDate, userExperienceId } = req.body;
+      if (!templateSlug || !eventDate) {
+        return res.status(400).json({ message: "templateSlug and eventDate are required" });
+      }
+
+      const { generatePresetsForTrip } = await import('./services/logistics-presets.service');
+      const result = await generatePresetsForTrip(
+        req.params.tripId,
+        templateSlug,
+        eventDate,
+        userExperienceId
+      );
+      res.status(201).json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to generate presets", error: error.message });
+    }
+  });
+
+  app.post("/api/trips/:tripId/anchors/:anchorId/impacts", isAuthenticated, async (req, res) => {
+    try {
+      const trip = await storage.getTrip(req.params.tripId);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+      const userId = (req.user as any).claims.sub;
+      if (trip.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { detectAnchorImpacts } = await import('./services/logistics-presets.service');
+      const impacts = await detectAnchorImpacts(req.params.tripId, req.params.anchorId);
+      res.json({ impacts });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to detect impacts", error: error.message });
+    }
+  });
 }

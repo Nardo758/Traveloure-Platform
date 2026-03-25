@@ -17,6 +17,12 @@ import {
   CreditCard,
   AlertCircle,
   Bus,
+  Calendar,
+  MapPin,
+  Eye,
+  XCircle,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { TransportLeg, type TransportLegData, type TransportAlternative } from "@/components/itinerary/TransportLeg";
 import { TransportHub } from "@/components/itinerary/TransportHub";
@@ -29,6 +35,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useTrip, useGeneratedItinerary } from "@/hooks/use-trips";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -44,6 +52,7 @@ import { DaySelector } from "@/components/plancard/DaySelector";
 import { SectionTabs } from "@/components/plancard/SectionTabs";
 import { ActivitiesSection } from "@/components/plancard/ActivitiesSection";
 import { TransportSection } from "@/components/plancard/TransportSection";
+import { TwelveGoTransport } from "@/components/twelvego/TwelveGoTransport";
 
 type BookingType = 'inApp' | 'partner';
 type BookingStatus = 'pending' | 'booked' | 'confirmed';
